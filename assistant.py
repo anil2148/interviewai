@@ -17,6 +17,7 @@ Linux:
 
 from __future__ import annotations
 
+import ctypes
 import json
 import queue
 import threading
@@ -50,6 +51,25 @@ _tts_engine.setProperty("volume", config.TTS_VOLUME)
 def log(msg: str) -> None:
     if config.DEBUG:
         print(f"[HiddenAIAssistant] {msg}")
+
+
+def hide_console_window_if_configured() -> None:
+    """Hide the Windows console to keep assistant invisible while sharing screen."""
+    if not config.HIDE_CONSOLE:
+        return
+
+    if config.PLATFORM != "windows":
+        return
+
+    try:
+        user32 = ctypes.WinDLL("user32")
+        kernel32 = ctypes.WinDLL("kernel32")
+        hwnd = kernel32.GetConsoleWindow()
+        if hwnd:
+            user32.ShowWindow(hwnd, 0)  # SW_HIDE
+            log("Windows console window hidden.")
+    except Exception as exc:
+        log(f"Could not hide console window: {exc}")
 
 
 def listen_once(timeout: float) -> Optional[str]:
@@ -193,18 +213,15 @@ def on_hotkey() -> None:
 def wake_word_loop() -> None:
     """Optional wake-word loop based on Porcupine.
 
-    For practical cross-platform deployment, this implementation uses Porcupine to detect
-    a wake word and then captures speech using the shared SpeechRecognition microphone flow.
+    Notes:
+    - Requires `pvporcupine` and `pyaudio` installed.
+    - Requires `PORCUPINE_ACCESS_KEY`.
     """
-    if not config.USE_WAKE_WORD:
-        return
-
     if pvporcupine is None:
-        log("Wake word enabled but pvporcupine is not installed.")
+        log("pvporcupine not installed. Wake-word loop disabled.")
         return
-
     if not config.PORCUPINE_ACCESS_KEY:
-        log("Wake word enabled but PORCUPINE_ACCESS_KEY is missing.")
+        log("PORCUPINE_ACCESS_KEY missing. Wake-word loop disabled.")
         return
 
     import pyaudio
@@ -213,6 +230,7 @@ def wake_word_loop() -> None:
         access_key=config.PORCUPINE_ACCESS_KEY,
         keywords=config.WAKE_WORD_KEYWORDS,
     )
+
     pa = pyaudio.PyAudio()
     stream = pa.open(
         rate=porcupine.sample_rate,
@@ -246,6 +264,8 @@ def wake_word_loop() -> None:
 def main() -> None:
     log("Starting HiddenAIAssistant.")
 
+    hide_console_window_if_configured()
+
     worker = threading.Thread(target=process_commands, daemon=True)
     worker.start()
 
@@ -254,13 +274,8 @@ def main() -> None:
         wake_thread = threading.Thread(target=wake_word_loop, daemon=True)
         wake_thread.start()
 
-    print("Press Enter to start listening. Type q then Enter to quit.")
-
-while True:
-    cmd = input().strip().lower()
-    if cmd == "q":
-        break
-    on_hotkey()
+    keyboard.add_hotkey(config.HOTKEY, on_hotkey)
+    log(f"Assistant is running in background. Press {config.HOTKEY} to speak.")
 
     try:
         while True:
@@ -277,4 +292,3 @@ while True:
 
 if __name__ == "__main__":
     main()
-    
