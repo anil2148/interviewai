@@ -1,0 +1,6 @@
+speechrecognition
+pyttsx3
+keyboard
+pyaudio
+ollama
+pvporcupine
