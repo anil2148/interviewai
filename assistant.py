@@ -134,14 +134,22 @@ def listen_once(timeout: float) -> Optional[str]:
 def ask_ai(prompt: str) -> str:
     """Send prompt to configured AI engine and return response text."""
     if config.AI_ENGINE == "ollama":
-        response = ollama.chat(
-            model=config.OLLAMA_MODEL,
-            messages=[{"role": "user", "content": prompt}],
-            options={"num_ctx": 4096},
-            keep_alive="5m",
-        )
-        message = response.get("message", {})
-        return str(message.get("content", "")).strip()
+        try:
+            client = ollama.Client(host=config.OLLAMA_HOST)
+            response = client.chat(
+                model=config.OLLAMA_MODEL,
+                messages=[{"role": "user", "content": prompt}],
+                options={"num_ctx": 4096},
+                keep_alive="5m",
+            )
+            message = response.get("message", {})
+            return str(message.get("content", "")).strip()
+        except Exception as exc:
+            return (
+                "Failed to connect to Ollama. Please check that Ollama is downloaded, "
+                "running and accessible. https://ollama.com/download "
+                f"(host: {config.OLLAMA_HOST}, model: {config.OLLAMA_MODEL}, error: {exc})"
+            )
 
     if config.AI_ENGINE == "openai":
         if not config.OPENAI_API_KEY:
