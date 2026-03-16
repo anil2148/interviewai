@@ -77,6 +77,11 @@ def hide_console_window_if_configured() -> None:
         return
 
     if platform_name != "windows":
+    """Hide the Windows console to keep assistant invisible while sharing screen."""
+    if not config.HIDE_CONSOLE:
+        return
+
+    if config.PLATFORM != "windows":
         return
 
     try:
@@ -364,6 +369,8 @@ def main() -> None:
         log(f"Assistant is running in background. Press {config.HOTKEY} to speak.")
     else:
         log("Global hotkey unavailable. Enable wake word or fix hotkey permissions/dependencies.")
+    keyboard.add_hotkey(config.HOTKEY, on_hotkey)
+    log(f"Assistant is running in background. Press {config.HOTKEY} to speak.")
 
     try:
         while True:
