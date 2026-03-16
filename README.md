@@ -210,6 +210,25 @@ Make sure your virtual environment is activated and dependencies installed:
 pip install -r requirements.txt
 ```
 
+### `pyaudio` fails with `portaudio.h` not found on macOS
+
+Run:
+
+```bash
+brew update
+brew install portaudio
+export CFLAGS="-I$(brew --prefix portaudio)/include"
+export LDFLAGS="-L$(brew --prefix portaudio)/lib"
+export PKG_CONFIG_PATH="$(brew --prefix portaudio)/lib/pkgconfig"
+pip install --no-cache-dir --force-reinstall PyAudio==0.2.14
+```
+
+Then retry:
+
+```bash
+pip install -r requirements.txt
+```
+
 ### No microphone input
 
 - Check OS microphone permissions for your terminal/python.
