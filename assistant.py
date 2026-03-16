@@ -54,22 +54,11 @@ def log(msg: str) -> None:
 
 
 def hide_console_window_if_configured() -> None:
-    """Hide the Windows console to keep assistant invisible while sharing screen.
-
-    Backward-compatible: if running with an older config module that does not yet
-    define HIDE_CONSOLE/PLATFORM, default to hiding on Windows only.
-    """
-    hide_console = getattr(config, "HIDE_CONSOLE", True)
-    platform_name = str(getattr(config, "PLATFORM", "")).lower()
-    if not platform_name:
-        import platform as _platform
-
-        platform_name = "windows" if _platform.system().lower().startswith("win") else _platform.system().lower()
-
-    if not hide_console:
+    """Hide the Windows console to keep assistant invisible while sharing screen."""
+    if not config.HIDE_CONSOLE:
         return
 
-    if platform_name != "windows":
+    if config.PLATFORM != "windows":
         return
 
     try:
