@@ -1,6 +1,6 @@
 speechrecognition
 pyttsx3
 keyboard
-pyaudio
+PyAudio==0.2.14
 ollama
 pvporcupine
