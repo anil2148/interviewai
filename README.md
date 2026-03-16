@@ -279,4 +279,15 @@ If hotkeys do not work on macOS, grant **Accessibility** permission to your term
 
 - System Settings → Privacy & Security → Accessibility
 
+If you see a message like:
+
+`This process is not trusted! Input event monitoring will not be possible until it is added to accessibility clients.`
+
+that means macOS blocked global key monitoring. Add the exact app that launched Python (for example: Terminal, iTerm, VS Code, or your packaged app) to:
+
+- System Settings → Privacy & Security → Accessibility
+- (If prompted on your setup) System Settings → Privacy & Security → Input Monitoring
+
+After granting access, fully quit and relaunch the app/session so permissions take effect.
+
 The assistant now falls back safely (no crash) and can still work with wake word if enabled.
