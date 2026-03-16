@@ -4,6 +4,10 @@ Environment variable overrides are supported for the most common options.
 """
 
 import os
+import platform
+
+# Runtime platform.
+PLATFORM = "windows" if platform.system().lower().startswith("win") else platform.system().lower()
 
 # Activation hotkey used by the `keyboard` package.
 HOTKEY = os.getenv("HIDDEN_AI_HOTKEY", "ctrl+shift+a")
@@ -46,3 +50,6 @@ TTS_VOLUME = float(os.getenv("HIDDEN_AI_TTS_VOLUME", "1.0"))
 
 # Logging verbosity.
 DEBUG = os.getenv("HIDDEN_AI_DEBUG", "true").lower() == "true"
+
+# Hide Windows console window at startup for private background use.
+HIDE_CONSOLE = os.getenv("HIDDEN_AI_HIDE_CONSOLE", "true").lower() == "true"

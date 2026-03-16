@@ -158,12 +158,12 @@ python assistant.py
 
 What to expect:
 
-1. App starts in foreground.
-2. Press `Ctrl+Shift+A`.
+1. App starts and keeps running in the background loop.
+2. Press `Ctrl+Shift+A` (or your configured hotkey).
 3. Speak your prompt.
-4. Hear spoken answer.
+4. The assistant generates the answer in a worker thread and reads it out loud.
 
-Stop with `Ctrl+C`.
+Stop with `Ctrl+C` only if running in a visible terminal session.
 
 ---
 
@@ -173,6 +173,9 @@ Stop with `Ctrl+C`.
 
 ```powershell
 pythonw.exe assistant.py
+# Optional if using python.exe:
+$env:HIDDEN_AI_HIDE_CONSOLE = "true"
+python assistant.py
 ```
 
 ### macOS/Linux
@@ -197,6 +200,7 @@ Set variables as needed:
 - `HIDDEN_AI_TTS_RATE`
 - `HIDDEN_AI_TTS_VOLUME`
 - `HIDDEN_AI_DEBUG`
+- `HIDDEN_AI_HIDE_CONSOLE` (`true` by default on Windows, hides terminal window)
 
 ---
 
