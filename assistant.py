@@ -254,8 +254,13 @@ def main() -> None:
         wake_thread = threading.Thread(target=wake_word_loop, daemon=True)
         wake_thread.start()
 
-    keyboard.add_hotkey(config.HOTKEY, on_hotkey)
-    log(f"Hotkey registered: {config.HOTKEY}")
+    print("Press Enter to start listening. Type q then Enter to quit.")
+
+while True:
+    cmd = input().strip().lower()
+    if cmd == "q":
+        break
+    on_hotkey()
 
     try:
         while True:
@@ -272,3 +277,4 @@ def main() -> None:
 
 if __name__ == "__main__":
     main()
+    
