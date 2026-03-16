@@ -38,6 +38,11 @@ try:
 except Exception:  # optional dependency
     pvporcupine = None
 
+try:
+    from pynput import keyboard as pynput_keyboard  # type: ignore
+except Exception:  # optional dependency
+    pynput_keyboard = None
+
 
 recognizer = sr.Recognizer()
 command_queue: "queue.Queue[str]" = queue.Queue()
@@ -46,6 +51,8 @@ _tts_lock = threading.Lock()
 _tts_engine = pyttsx3.init()
 _tts_engine.setProperty("rate", config.TTS_RATE)
 _tts_engine.setProperty("volume", config.TTS_VOLUME)
+_hotkey_backend: Optional[str] = None
+_pynput_listener: Optional[object] = None
 
 
 def log(msg: str) -> None:
@@ -54,6 +61,22 @@ def log(msg: str) -> None:
 
 
 def hide_console_window_if_configured() -> None:
+    """Hide the Windows console to keep assistant invisible while sharing screen.
+
+    Backward-compatible: if running with an older config module that does not yet
+    define HIDE_CONSOLE/PLATFORM, default to hiding on Windows only.
+    """
+    hide_console = getattr(config, "HIDE_CONSOLE", True)
+    platform_name = str(getattr(config, "PLATFORM", "")).lower()
+    if not platform_name:
+        import platform as _platform
+
+        platform_name = "windows" if _platform.system().lower().startswith("win") else _platform.system().lower()
+
+    if not hide_console:
+        return
+
+    if platform_name != "windows":
     """Hide the Windows console to keep assistant invisible while sharing screen."""
     if not config.HIDE_CONSOLE:
         return
@@ -210,6 +233,74 @@ def on_hotkey() -> None:
         command_queue.put(text)
 
 
+def _to_pynput_hotkey(hotkey: str) -> str:
+    """Convert keyboard package hotkey syntax to pynput GlobalHotKeys syntax."""
+    mapping = {
+        "ctrl": "<ctrl>",
+        "control": "<ctrl>",
+        "shift": "<shift>",
+        "alt": "<alt>",
+        "cmd": "<cmd>",
+        "command": "<cmd>",
+        "win": "<cmd>",
+        "windows": "<cmd>",
+        "option": "<alt>",
+    }
+    parts = [p.strip().lower() for p in hotkey.split("+") if p.strip()]
+    converted = [mapping.get(p, p) for p in parts]
+    return "+".join(converted)
+
+
+def register_hotkey() -> bool:
+    """Register a global hotkey using an OS-appropriate backend without crashing."""
+    global _hotkey_backend
+    global _pynput_listener
+
+    platform_name = str(getattr(config, "PLATFORM", "")).lower()
+    if platform_name.startswith("win"):
+        platform_name = "windows"
+
+    # Use keyboard backend on Windows; use pynput elsewhere to avoid known keyboard
+    # permission/mapping issues on macOS.
+    if platform_name == "windows":
+        try:
+            keyboard.add_hotkey(config.HOTKEY, on_hotkey)
+            _hotkey_backend = "keyboard"
+            return True
+        except Exception as exc:
+            log(f"Hotkey registration failed with keyboard backend: {exc}")
+            return False
+
+    if pynput_keyboard is None:
+        log("pynput is not installed; hotkey disabled on this platform.")
+        return False
+
+    try:
+        hotkey = _to_pynput_hotkey(config.HOTKEY)
+        listener = pynput_keyboard.GlobalHotKeys({hotkey: on_hotkey})
+        listener.start()
+        _pynput_listener = listener
+        _hotkey_backend = "pynput"
+        return True
+    except Exception as exc:
+        log(f"Hotkey registration failed with pynput backend: {exc}")
+        return False
+
+
+def cleanup_hotkeys() -> None:
+    """Unregister hotkeys/listeners for whichever backend was used."""
+    global _pynput_listener
+
+    if _hotkey_backend == "keyboard":
+        keyboard.unhook_all_hotkeys()
+
+    if _hotkey_backend == "pynput" and _pynput_listener is not None:
+        try:
+            _pynput_listener.stop()
+        except Exception as exc:
+            log(f"Failed to stop pynput listener cleanly: {exc}")
+
+
 def wake_word_loop() -> None:
     """Optional wake-word loop based on Porcupine.
 
@@ -274,6 +365,10 @@ def main() -> None:
         wake_thread = threading.Thread(target=wake_word_loop, daemon=True)
         wake_thread.start()
 
+    if register_hotkey():
+        log(f"Assistant is running in background. Press {config.HOTKEY} to speak.")
+    else:
+        log("Global hotkey unavailable. Enable wake word or fix hotkey permissions/dependencies.")
     keyboard.add_hotkey(config.HOTKEY, on_hotkey)
     log(f"Assistant is running in background. Press {config.HOTKEY} to speak.")
 
@@ -284,7 +379,7 @@ def main() -> None:
         log("KeyboardInterrupt received. Shutting down.")
     finally:
         shutdown_event.set()
-        keyboard.unhook_all_hotkeys()
+        cleanup_hotkeys()
         worker.join(timeout=2)
         if wake_thread is not None:
             wake_thread.join(timeout=2)

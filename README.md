@@ -14,6 +14,7 @@ This guide gives full local setup instructions for **Windows**, **macOS**, and *
   - **Ollama** (local model), or
   - **OpenAI-compatible API**.
 - The answer is spoken by `pyttsx3`.
+- Global hotkey backend: `keyboard` on Windows, `pynput` on macOS/Linux.
 - Optional wake-word support via `pvporcupine`.
 
 ---
@@ -270,3 +271,12 @@ python assistant.py
 ```
 
 Press hotkey and speak to validate end-to-end behavior.
+
+
+### macOS hotkey permission error
+
+If hotkeys do not work on macOS, grant **Accessibility** permission to your terminal/python app in:
+
+- System Settings → Privacy & Security → Accessibility
+
+The assistant now falls back safely (no crash) and can still work with wake word if enabled.
