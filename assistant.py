@@ -246,6 +246,29 @@ def _to_pynput_hotkey(hotkey: str) -> str:
     return "+".join(converted)
 
 
+def _pynput_hotkey_variants(hotkey: str) -> list[str]:
+    """Return robust pynput hotkey variants for tricky Shift+letter combos.
+
+    On some systems, pynput may report the final key as uppercase when Shift is
+    held. Registering both lower/upper variants avoids missing callbacks for
+    defaults like Ctrl+Shift+A.
+    """
+    base = _to_pynput_hotkey(hotkey)
+    variants = [base]
+    parts = [p for p in base.split("+") if p]
+
+    if "<shift>" in parts and parts:
+        last = parts[-1]
+        if len(last) == 1 and last.isalpha():
+            alt_last = last.upper() if last.islower() else last.lower()
+            alt_parts = parts[:-1] + [alt_last]
+            alt = "+".join(alt_parts)
+            if alt not in variants:
+                variants.append(alt)
+
+    return variants
+
+
 def register_hotkey() -> bool:
     """Register a global hotkey using an OS-appropriate backend without crashing."""
     global _hotkey_backend
@@ -271,8 +294,8 @@ def register_hotkey() -> bool:
         return False
 
     try:
-        hotkey = _to_pynput_hotkey(config.HOTKEY)
-        listener = pynput_keyboard.GlobalHotKeys({hotkey: on_hotkey})
+        hotkeys = {hk: on_hotkey for hk in _pynput_hotkey_variants(config.HOTKEY)}
+        listener = pynput_keyboard.GlobalHotKeys(hotkeys)
         listener.start()
         _pynput_listener = listener
         _hotkey_backend = "pynput"
