@@ -4,3 +4,4 @@ keyboard
 PyAudio==0.2.14
 ollama
 pvporcupine
+pynput
