@@ -273,6 +273,7 @@ python assistant.py
 Press hotkey and speak to validate end-to-end behavior.
 
 
+<<<<<<< HEAD
 ### macOS hotkey permission error
 
 If hotkeys do not work on macOS, grant **Accessibility** permission to your terminal/python app in:
@@ -291,3 +292,39 @@ that means macOS blocked global key monitoring. Add the exact app that launched 
 After granting access, fully quit and relaunch the app/session so permissions take effect.
 
 The assistant now falls back safely (no crash) and can still work with wake word if enabled.
+=======
+
+# 1. Switch to faster-whisper
+pip install faster-whisper
+
+# 2. Pull faster model
+ollama pull phi3:mini
+ollama pull qwen2.5:3b
+
+# 3. Install web search
+pip install duckduckgo-search
+
+# 4. Install markdown rendering
+pip install markdown2
+
+# 5. Install vision support
+ollama pull llava
+
+
+
+
+
+
+The setup guide is ready. Here's what's covered across 10 sections:
+
+Section 1 — Overview — Feature table covering all 12 capabilities with descriptions
+Section 2 — System Requirements — Python version, OS, RAM, disk, GPU, microphone
+Section 3 — Installation — Step-by-step: venv setup, core deps, optional packages table with feature unlocked, Ollama install + model pull commands, pynput fix
+Section 4 — Configuration — Full config.py template with all settings, persistent settings file location, directory structure table
+Section 5 — Running the Assistant — 3-step launch, expected debug output, macOS Accessibility permissions tip
+Section 6 — Keyboard Shortcuts — Two tables: global hotkeys + overlay shortcuts
+Section 7 — Prompt Templates — All 12 templates (/code, /explain, /search, /vision, /run, /rag, etc.)
+Section 8 — Features Guide — Detailed usage for voice input, stop generation, mute, RAG, web search, vision, panic hide, pin/rate, plugins, REST API
+Section 9 — Troubleshooting — 10 common problems with solutions, diagnostic script
+Section 10 — Quick Reference Card — Printable 2-column table with all hotkeys, templates, and terminal commands
+>>>>>>> d3c6b08 (agent code)
