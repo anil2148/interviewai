@@ -126,31 +126,9 @@ def listen_once(timeout: float) -> Optional[str]:
 
         log(f"Unsupported STT_ENGINE: {config.STT_ENGINE}")
         return None
-    if len(audio_data) < 8000:
-        return None
-    tmp = None
-    try:
-        import warnings
-        with tempfile.NamedTemporaryFile(suffix=".wav", delete=False) as f:
-            f.write(audio_data)
-            tmp = f.name
-        with warnings.catch_warnings():
-            warnings.filterwarnings("ignore", category=RuntimeWarning)
-            segments, _ = model.transcribe(
-                tmp, beam_size=1, language="en", vad_filter=True,
-                vad_parameters=dict(min_silence_duration_ms=500, speech_pad_ms=400),
-            )
-            text = " ".join(s.text for s in segments).strip()
-        return text or None
     except Exception as exc:
-        log(f"faster-whisper: {exc}")
+        log(f"Unexpected transcription error: {exc}")
         return None
-    finally:
-        if tmp and os.path.exists(tmp):
-            try:
-                os.unlink(tmp)
-            except Exception:
-                pass
 
 
 # =============================================================================
