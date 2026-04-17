@@ -170,6 +170,8 @@ DEFAULT_SETTINGS: Dict = {
     "clipboard_monitor":  False,
     "continuous_listen":  False,
     "auto_clear_minutes": 0,
+    "auto_reveal_on_response": False,
+    "aggressive_keepalive": False,
     "rest_api_port":      7788,
     "rest_api_enabled":   False,
     "web_search_enabled": True,
@@ -300,6 +302,7 @@ _response_cache: Dict[str, str] = {}
 _CACHE_MAX = 200
 
 _generation_stop_event = threading.Event()
+_generation_in_progress = threading.Event()
 
 
 def log(msg: str) -> None:
@@ -1205,6 +1208,7 @@ def process_commands() -> None:
         # Clear stop flag right before we start — ensures a clean slate even
         # if a stale event was left over from a previous stopped request.
         _generation_stop_event.clear()
+        _generation_in_progress.set()
 
         answer      = ""
         was_stopped = False
@@ -1216,6 +1220,7 @@ def process_commands() -> None:
             if _overlay_window:
                 _overlay_window.set_response(answer)
         finally:
+            _generation_in_progress.clear()
             if _overlay_window:
                 _overlay_window.hide_stop_btn()
             _generation_stop_event.clear()
@@ -2700,18 +2705,24 @@ if HAS_PYQT5:
             self.mute_btn.setToolTip("Unmute  Ctrl+M" if muted else "Mute  Ctrl+M")
 
         def _on_stop_generation(self) -> None:
+            if not _generation_in_progress.is_set():
+                self._show_toast("Nothing is generating", "#94a3b8")
+                return
             _generation_stop_event.set()
-            self._set_stop_visible(0)
+            self.inline_stop_btn.setEnabled(False)
+            self.inline_stop_btn.setStyleSheet(self._stop_idle_style())
+            self.stop_btn.setEnabled(False)
+            self.stop_btn.setText("Stopping…")
             self._stop_thinking()
-            self._set_status("Stopped ⏹", "#ffaa44")
-            self._show_toast("Generation stopped ⏹", "#fbbf24")
+            self._set_status("Stopping…", "#ffaa44")
+            self._show_toast("Stopping generation…", "#fbbf24")
             try:
                 if _HAS_TTS and _tts_engine is not None:
                     _tts_engine.stop()
             except Exception:
                 pass
             QTimer.singleShot(2000, lambda: self._set_status("Ready", "#00c864"))
-            print("[DEBUG] Generation stopped by user")
+            print("[DEBUG] Generation stop requested by user")
 
         @pyqtSlot(int)
         def _set_stop_visible(self, visible_int: int) -> None:
@@ -2719,10 +2730,14 @@ if HAS_PYQT5:
             1 = generation started → activate stop controls.
             0 = generation finished → deactivate stop controls."""
             if visible_int:
+                self.stop_btn.setEnabled(True)
+                self.stop_btn.setText("⏹  Stop")
                 self.stop_btn.show()
                 self.inline_stop_btn.setEnabled(True)
                 self.inline_stop_btn.setStyleSheet(self._stop_active_style())
             else:
+                self.stop_btn.setEnabled(False)
+                self.stop_btn.setText("⏹  Stop")
                 self.stop_btn.hide()
                 self.inline_stop_btn.setEnabled(False)
                 self.inline_stop_btn.setStyleSheet(self._stop_idle_style())
@@ -2989,7 +3004,6 @@ if HAS_PYQT5:
             self.communicate.update_status.emit(s, c)
         def set_prompt(self, t: str) -> None:
             self.communicate.update_prompt.emit(t)
-            self.communicate.show_window.emit()
         def set_response(self, t: str) -> None:
             self.communicate.update_response.emit(t)
         def append_token(self, t: str) -> None:
@@ -3056,7 +3070,8 @@ if HAS_PYQT5:
             self._streaming      = False
             self._current_answer = t
             self._render_response(t)
-            if not self.is_visible: self._show()
+            if SETTINGS.get("auto_reveal_on_response", False) and not self.is_visible:
+                self._show()
             QTimer.singleShot(300, _rendering_event.clear)
 
         @pyqtSlot(str)
@@ -3068,7 +3083,8 @@ if HAS_PYQT5:
                 self.response_text.clear()
                 self._user_scrolled_up = False   # reset scroll tracking for new response
                 _rendering_event.set()
-                if not self.is_visible: self._show()
+                if SETTINGS.get("auto_reveal_on_response", False) and not self.is_visible:
+                    self._show()
 
             self._current_answer += t
 
@@ -3143,7 +3159,7 @@ if HAS_PYQT5:
             self.history_list.scrollToBottom()
 
         def _keepalive(self) -> None:
-            """Re-raise window every 2 s so it stays on top without stealing focus."""
+            """Keep passive flags intact without repeatedly re-raising the window."""
             if not self.is_visible or _panic_hidden:
                 return
             flags = (Qt.FramelessWindowHint | Qt.WindowStaysOnTopHint
@@ -3152,8 +3168,8 @@ if HAS_PYQT5:
                 self.setWindowFlags(flags)
                 self.setAttribute(Qt.WA_ShowWithoutActivating)
                 super().show()
-            # Use OS-level raise without activation instead of Qt raise_()
-            _raise_no_activate(self.winId())
+            if SETTINGS.get("aggressive_keepalive", False):
+                _raise_no_activate(self.winId())
 
         @pyqtSlot()
         def _show(self) -> None:
