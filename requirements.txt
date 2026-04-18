@@ -1,7 +1,175 @@
-speechrecognition
-pyttsx3
-keyboard
-PyAudio==0.2.14
-ollama
-pvporcupine
-pynput
+# =============================================================================
+#  AI Stealth Assistant — Requirements
+#  Python >= 3.10 required  (3.11 or 3.12 recommended for best performance)
+#
+#  Install all:          pip install -r requirements.txt
+#  Core only (headless): pip install -r requirements.txt --ignore-requires-python
+#
+#  For Apple Silicon (M1/M2/M3) read the notes marked [APPLE SILICON] below.
+# =============================================================================
+
+
+# =============================================================================
+#  CORE — required for the agent to run at all
+# =============================================================================
+
+# Local LLM backend (Ollama must also be running: https://ollama.com)
+ollama>=0.2.0
+
+# Speech-to-text: fast CPU Whisper transcription (the primary STT engine)
+faster-whisper>=1.0.0
+
+# Microphone capture & speech recognition (Google STT fallback + VAD helpers)
+SpeechRecognition>=3.10.0
+
+# Audio I/O — cross-platform, native Apple Silicon support
+# [APPLE SILICON] sounddevice uses PortAudio via a bundled wheel on M1/M2/M3;
+# no separate portaudio brew install needed when installed via pip.
+sounddevice>=0.4.6
+numpy>=1.26.0          # required by sounddevice and faster-whisper
+
+# PyAudio — fallback mic backend for non-sounddevice paths
+# [APPLE SILICON] brew install portaudio  →  pip install pyaudio
+# On Linux:  sudo apt install portaudio19-dev  →  pip install pyaudio
+# On Windows: pip install pyaudio  (pre-built wheel available)
+pyaudio>=0.2.14
+
+
+# =============================================================================
+#  WEB SERVICE — needed to expose the agent as an HTTP/WebSocket service
+# =============================================================================
+
+# FastAPI replaces the built-in http.server for production web service use.
+# Provides REST endpoints (/ask, /listen, /status, /settings) with async support.
+fastapi>=0.111.0
+
+# ASGI server — serves FastAPI in production
+uvicorn[standard]>=0.29.0
+
+# WebSocket support for streaming token responses to the browser
+websockets>=12.0
+
+# Request/response validation (FastAPI dependency)
+pydantic>=2.6.0
+
+# CORS support for browser clients calling the API from a different origin
+# (already included with fastapi, listed explicitly for clarity)
+# starlette>=0.37.0   # pulled in automatically by fastapi
+
+
+# =============================================================================
+#  RAG — optional document search (enables /rag command)
+# =============================================================================
+
+chromadb>=0.5.0
+
+
+# =============================================================================
+#  WEB SEARCH — optional (enables /search command and auto web-augmented answers)
+# =============================================================================
+
+duckduckgo-search>=6.1.0
+
+
+# =============================================================================
+#  TEXT-TO-SPEECH
+# =============================================================================
+
+# pyttsx3 — offline TTS, works on all platforms
+# [APPLE SILICON] uses macOS 'say' command under the hood — works natively
+pyttsx3>=2.90
+
+# Optional: ElevenLabs cloud TTS (configure API key in settings)
+# elevenlabs>=1.0.0
+
+# Optional: Coqui TTS (local neural TTS, GPU recommended)
+# TTS>=0.22.0
+
+
+# =============================================================================
+#  AUDIO — Voice Activity Detection for auto-listen mode
+# =============================================================================
+
+# webrtcvad — VAD for continuous listening; detects speech vs silence
+# [APPLE SILICON] pip install webrtcvad-wheels  (pre-built ARM64 wheel)
+# On Linux/Windows: pip install webrtcvad
+webrtcvad-wheels>=2.0.14
+
+
+# =============================================================================
+#  VISION — optional screenshot + OCR (enables /vision command)
+# =============================================================================
+
+Pillow>=10.3.0
+
+# pytesseract wraps the Tesseract OCR binary
+# Install Tesseract first:
+#   macOS:   brew install tesseract
+#   Linux:   sudo apt install tesseract-ocr
+#   Windows: https://github.com/UB-Mannheim/tesseract/wiki
+pytesseract>=0.3.10
+
+
+# =============================================================================
+#  MARKDOWN & SYNTAX HIGHLIGHTING — response rendering
+# =============================================================================
+
+markdown2>=2.4.13
+Pygments>=2.17.0
+
+
+# =============================================================================
+#  GLOBAL HOTKEYS — optional (Ctrl+L / Ctrl+A triggers from any app)
+# =============================================================================
+
+# pynput — global hotkey registration
+# [APPLE SILICON] requires Accessibility permission in System Settings
+# On Linux (X11): sudo apt install python3-xlib
+pynput>=1.7.6
+
+
+# =============================================================================
+#  WAKE-WORD — optional (say "Hey Computer" to trigger listen)
+# =============================================================================
+
+# pvporcupine — Picovoice wake-word engine (free tier available)
+# Requires a free access key from https://picovoice.ai
+# pvporcupine>=3.0.0
+
+
+# =============================================================================
+#  DESKTOP GUI — only needed when running with the overlay UI
+#  NOT required for headless web service mode
+# =============================================================================
+
+# PyQt6>=6.6.0
+
+
+# =============================================================================
+#  NOTES FOR WEB SERVICE DEPLOYMENT
+# =============================================================================
+#
+#  1. Ollama must be running separately:
+#       ollama serve
+#       ollama pull phi3:mini   # or whichever model is configured
+#
+#  2. Start the web service:
+#       uvicorn new_1:app --host 0.0.0.0 --port 7788 --reload
+#
+#  3. REST API endpoints (built-in http.server, always available):
+#       POST  http://localhost:7788/ask          {"prompt": "your question"}
+#       GET   http://localhost:7788/status       health check
+#
+#  4. For production, add a reverse proxy (nginx / caddy) in front of uvicorn.
+#
+#  5. GPU acceleration for faster-whisper (optional):
+#       pip install faster-whisper  # already above
+#       pip install nvidia-cublas-cu12 nvidia-cudnn-cu12  # CUDA 12.x
+#       Then set compute_type="float16" and device="cuda" in settings.
+#
+#  6. Docker one-liner:
+#       docker run --rm -p 7788:7788 \
+#         -v ~/.ai_assistant:/root/.ai_assistant \
+#         python:3.12-slim \
+#         sh -c "pip install -r requirements.txt && uvicorn new_1:app --host 0.0.0.0 --port 7788"
+# =============================================================================
