@@ -846,11 +846,7 @@ def _record_with_sounddevice(duration_max: int = 60,
     silent_count: int = 0
     got_speech: bool  = False
 
-    # FIX: clear stop_event here inside the recorder so it is guaranteed fresh
-    # even if the caller forgot, and the check is AFTER the read so we always
-    # capture at least one frame before honouring a stop request.
-    if manual_mode and stop_event:
-        stop_event.clear()
+    # stop_event cleared by caller before thread start — do not clear here.
 
     try:
         with sd.InputStream(samplerate=samplerate, channels=1,
@@ -1044,9 +1040,8 @@ _ptt_stop_event = threading.Event()
 
 
 def listen_ptt() -> Optional[str]:
-    """Record until _ptt_stop_event is set, then transcribe.
-    The stop event is cleared inside _record_with_sounddevice so it is
-    guaranteed fresh before the first read regardless of prior state."""
+    """Record until _ptt_stop_event is set, then transcribe."""
+    _ptt_stop_event.clear()
     listen_timeout = SETTINGS.get("listen_timeout_sec", 60)
 
     if _overlay_window:
@@ -1959,19 +1954,46 @@ def _apply_screen_share_invisibility(win_id: int) -> None:
 
 
 def _force_always_on_top_macos(win_id: int) -> None:
-    """Keep window on top WITHOUT activating it (no focus steal on macOS)."""
+    """Keep the overlay on top on macOS without stealing focus.
+
+    Safe approach — no raw ctypes ObjC calls (those segfault on M1/arm64).
+    Uses pyobjc (AppKit) only if already imported by the process; otherwise
+    falls back to pure Qt flag re-application which is safe and sufficient.
+    """
     if platform.system() != "Darwin":
         return
+
+    # ── Try pyobjc path only if AppKit is already imported (no segfault risk) ─
+    # We check sys.modules so we never import AppKit fresh here — importing it
+    # mid-run on a non-main thread can deadlock the ObjC runtime on M1.
+    import sys as _sys
+    if "AppKit" in _sys.modules:
+        try:
+            from AppKit import NSApplication  # type: ignore
+            NSStatusWindowLevel = 25   # above Spotlight, Dock, notification banners
+            for w in NSApplication.sharedApplication().windows():
+                try:
+                    if w.isVisible():
+                        w.setLevel_(NSStatusWindowLevel)
+                        w.setCanHide_(False)
+                        w.orderFront_(None)   # no focus steal
+                except Exception:
+                    pass
+        except Exception:
+            pass
+        return
+
+    # ── Pure Qt fallback (always safe, no ObjC calls) ────────────────────────
+    # Re-raise via Qt on the main thread. On macOS, WindowStaysOnTopHint +
+    # Tool + WA_ShowWithoutActivating is honoured by the window compositor
+    # when raise_() is called without activateWindow().
     try:
-        from AppKit import NSApplication  # type: ignore
-        for w in NSApplication.sharedApplication().windows():
+        from PyQt6.QtWidgets import QApplication as _QApp
+        for w in _QApp.topLevelWidgets():
             try:
-                # NSFloatingWindowLevel=5 keeps it on top; orderFront_ does NOT
-                # activate — unlike makeKeyAndOrderFront_ which would steal focus.
-                w.setLevel_(5)
-                w.setCanHide_(False)
-                w.setCollectionBehavior_(1 << 3 | 1 << 6)
-                w.orderFront_(None)   # raise without activating
+                if int(w.winId()) == int(win_id) and w.isVisible():
+                    w.raise_()   # stacking only — no focus steal on macOS Qt
+                    break
             except Exception:
                 pass
     except Exception:
@@ -2380,12 +2402,13 @@ if HAS_PYQT6:
 
         def mousePressEvent(self, e) -> None:
             if e.button() == Qt.MouseButton.LeftButton:
-                self._dp = e.globalPos() - self.frameGeometry().topLeft()
+                # globalPos() was removed in PyQt6 — use globalPosition().toPoint()
+                self._dp = e.globalPosition().toPoint() - self.frameGeometry().topLeft()
             super().mousePressEvent(e)
 
         def mouseMoveEvent(self, e) -> None:
             if e.buttons() == Qt.MouseButton.LeftButton:
-                self.move(e.globalPos() - self._dp)
+                self.move(e.globalPosition().toPoint() - self._dp)
             super().mouseMoveEvent(e)
 
 
@@ -2447,7 +2470,7 @@ if HAS_PYQT6:
             # Fixes: overlay vanishing when another app takes focus on Windows/macOS
             self._keepalive_timer = QTimer()
             self._keepalive_timer.timeout.connect(self._keepalive)
-            self._keepalive_timer.start(2000)
+            self._keepalive_timer.start(500)
 
             self._init_ui()
             # No auto-focus on startup — don't steal focus from other apps
@@ -3181,7 +3204,8 @@ if HAS_PYQT6:
 
         def mousePressEvent(self, e) -> None:
             if e.button() == Qt.MouseButton.LeftButton:
-                self.drag_pos = e.globalPos() - self.frameGeometry().topLeft()
+                # globalPos() was removed in PyQt6 — use globalPosition().toPoint()
+                self.drag_pos = e.globalPosition().toPoint() - self.frameGeometry().topLeft()
             # FIX: must call super() so Qt routes the click event to child widgets
             # (e.g. focusing input_box when the user clicks on it).
             # Previously suppressed with a comment "would activate the window" —
@@ -3191,7 +3215,7 @@ if HAS_PYQT6:
 
         def mouseMoveEvent(self, e) -> None:
             if e.buttons() == Qt.MouseButton.LeftButton:
-                self.move(e.globalPos() - self.drag_pos)
+                self.move(e.globalPosition().toPoint() - self.drag_pos)
             super().mouseMoveEvent(e)
 
         # ── Thinking animation ────────────────────────────────────────────────
@@ -3327,8 +3351,7 @@ if HAS_PYQT6:
                 return
 
             if not self._is_listening:
-                # ── START: update UI immediately, then start background thread ──
-                # Set flag here on Qt thread before the thread starts — avoids race.
+                _ptt_stop_event.clear()   # clear stale stop before thread starts
                 self._is_listening = True
                 self._set_mic_active(True)
                 threading.Thread(target=self._ptt_thread, daemon=True,
@@ -3352,12 +3375,18 @@ if HAS_PYQT6:
                         "✏  Review & press Enter to send", "#ffcc00")
                 else:
                     self.communicate.update_status.emit("Ready", "#00c864")
+            except PermissionError as exc:
+                print(f"[ERROR] Mic permission denied: {exc}")
+                self.communicate.update_status.emit(
+                    "Mic blocked — System Settings → Privacy → Microphone → allow Terminal", "#ff4444")
+            except OSError as exc:
+                print(f"[ERROR] Mic OSError: {exc}")
+                self.communicate.update_status.emit(f"Mic error: {exc}", "#ff4444")
             except Exception as exc:
-                log(f"_ptt_thread: {exc}")
-                self.communicate.update_status.emit("Mic error — check console", "#ff4444")
+                print(f"[ERROR] PTT {type(exc).__name__}: {exc}")
+                self.communicate.update_status.emit(
+                    f"Mic error — {type(exc).__name__}: check console", "#ff4444")
             finally:
-                # FIX: emit signal instead of writing _is_listening directly.
-                # The slot _on_ptt_state runs on the Qt thread, avoiding the data race.
                 self.communicate.ptt_state_changed.emit(False)
 
         @pyqtSlot(bool)
@@ -3929,18 +3958,18 @@ if HAS_PYQT6:
             self.history_list.scrollToBottom()
 
         def _keepalive(self) -> None:
-            """Keep passive flags intact without repeatedly re-raising the window."""
+            """Re-raise overlay every tick without stealing focus."""
             if not self.is_visible or _panic_hidden:
                 return
-            # FIX: WindowDoesNotAcceptFocus removed from enforced flags.
             flags = (Qt.WindowType.FramelessWindowHint | Qt.WindowType.WindowStaysOnTopHint
                      | Qt.WindowType.Tool)
             if self.windowFlags() != flags:
                 self.setWindowFlags(flags)
                 self.setAttribute(Qt.WidgetAttribute.WA_ShowWithoutActivating)
                 super().show()
-            if SETTINGS.get("aggressive_keepalive", False):
-                _raise_no_activate(self.winId())
+            # Always re-raise — aggressive_keepalive gate removed.
+            # Without this call, any window opened after the overlay covers it forever.
+            _raise_no_activate(self.winId())
 
         @pyqtSlot()
         def _show(self) -> None:
