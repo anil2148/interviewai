@@ -1,0 +1,37 @@
+services:
+  - type: web
+    name: ai-stealth-assistant
+    runtime: python
+    # Use 3.12 — stable wheels exist for all dependencies.
+    # 3.14 is too new; faster-whisper and chromadb lack wheels for it.
+    pythonVersion: "3.12"
+
+    # Install Tesseract OCR binary before pip runs (required by pytesseract).
+    # libgomp1 is required by faster-whisper's CTranslate2 backend on Linux.
+    # No portaudio — pyaudio/sounddevice are excluded from requirements.txt.
+    buildCommand: |
+      apt-get update -qq && \
+      apt-get install -y --no-install-recommends \
+        tesseract-ocr \
+        libgomp1 \
+      && pip install --upgrade pip \
+      && pip install -r requirements.txt
+
+    startCommand: uvicorn new_1:app --host 0.0.0.0 --port $PORT
+
+    envVars:
+      - key: OLLAMA_HOST
+        value: http://localhost:11434   # change to your Ollama service URL
+      - key: OLLAMA_MODEL
+        value: phi3:mini
+      - key: AI_ENGINE
+        value: ollama
+      - key: PORT
+        value: "10000"                  # Render default port
+
+    # Render free tier has 512 MB RAM — use tiny or base Whisper model.
+    # Upgrade to Starter (2 GB) for base, Standard (4 GB) for small/medium.
+    disk:
+      name: ai-assistant-data
+      mountPath: /root/.ai_assistant
+      sizeGB: 1
